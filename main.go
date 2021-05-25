@@ -2,10 +2,12 @@ package main
 
 import (
 	"cache_server/HTTP"
+	"cache_server/TCP"
 	"cache_server/cache"
 )
 
 func main()  {
-	c := cache.New("inmemory")
-	HTTP.New(c).Listen()
+	ca := cache.New("inmemory")
+	go TCP.New(ca).Listen()
+	HTTP.New(ca).Listen()
 }
