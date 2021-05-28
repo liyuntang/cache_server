@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"log"
 	"sync"
 )
@@ -22,6 +23,7 @@ func (s *Stat)add(k string, v []byte) {
 	s.Count += 1
 	s.KeySize += int64(len(k))
 	s.ValueSize += int64(len(v))
+	//fmt.Println("count is", s.Count, "key size is", s.KeySize, "value size is", s.ValueSize)
 }
 
 func (s *Stat)del(k string, v []byte) {
@@ -50,6 +52,7 @@ type inMemoryCache struct {
 }
 
 func (c *inMemoryCache)Set(k string, v []byte) error {
+	//fmt.Println("set operation is runing.................")
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 	tmp, exist := c.c[k]
@@ -57,6 +60,7 @@ func (c *inMemoryCache)Set(k string, v []byte) error {
 		c.del(k, tmp)
 	}
 	c.c[k] = v
+	fmt.Println("set is ok, data is", c.c)
 	c.add(k, v)
 	return nil
 }
