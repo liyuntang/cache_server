@@ -75,15 +75,24 @@ func sendResponse(value []byte, err error, conn net.Conn) error {
 	if err != nil {
 		errString := err.Error()
 		tmp := fmt.Sprintf("-%d", len(errString)) + errString
+		fmt.Println("set 操作报错了，错误信息为:", tmp)
 		_, e := conn.Write([]byte(tmp))
 		return e
 	}
 // 说明set的时候没有报错
 // 不对啊，这个地方value的值为nil，手动写死的，长度自然为0，有何意义
 	vlen := fmt.Sprintf("%d", len(value))
-	//fmt.Println(">>>>>>>>>>>>>>>>>>len of value is", vlen)
+	fmt.Println("set操作成正常，vlen is", vlen)
 	//fmt.Println([]byte(vlen), value, string([]byte(vlen)), string(value))
-	_, e := conn.Write(append([]byte(vlen), value...))
+	data := []byte(vlen)
+	data = append(data, value...)
+	fmt.Println("返回信息为", data, "string is", string(data))
+	num, e := conn.Write(data)
+	if e != nil {
+		fmt.Println("返回信息失败，错误信息:", e)
+	} else {
+		fmt.Println("返回信息成功，一共发送了", num, "个字节")
+	}
 	return e
 }
 
@@ -118,9 +127,10 @@ func (s *Server) del(conn net.Conn, r *bufio.Reader) error {
 
 func (s *Server) process(conn net.Conn)  {
 	fmt.Println("process.................")
-	defer conn.Close()
 	r := bufio.NewReader(conn)
+	num := 1
 	for {
+		fmt.Println("开始处理第", num, "个请求")
 		// readbyte好像是获取net.conn数据流的第一个字符
 		op, e := r.ReadByte()
 		if e != nil {
@@ -133,7 +143,7 @@ func (s *Server) process(conn net.Conn)  {
 		if op == 'S' {
 			e = s.set(conn, r)
 		}else if op == 'G' {
-			e = s.set(conn, r)
+			e = s.get(conn, r)
 		} else if op == 'D' {
 			e = s.del(conn, r)
 		} else {
@@ -144,6 +154,8 @@ func (s *Server) process(conn net.Conn)  {
 			log.Println("close connection due to error:", e)
 			return
 		}
-		fmt.Println("操作成功")
+		fmt.Println("第", num, "个请求处理完成")
+		num +=1
+		break
  	}
 }
