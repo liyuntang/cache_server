@@ -4,10 +4,20 @@ import (
 	"cache_server/HTTP"
 	"cache_server/TCP"
 	"cache_server/cache"
+	"cache_server/cluster"
+	"flag"
 )
 
 func main()  {
-	ca := cache.New("inmemory")
-	go TCP.New(ca).Listen()
-	HTTP.New(ca).Listen()
+	typ := flag.String("type", "inmemory", "cache type")
+	node := flag.String("node", "127.0.0.1", "node address")
+	clus := flag.String("cluster", "", "cluster address")
+	flag.Parse()
+	c := cache.New(*typ)
+	n, e := cluster.New(*node, *clus)
+	if e != nil {
+		panic(e)
+	}
+	go TCP.New(c, n).Listen()
+	HTTP.New(c, n).Listen()
 }

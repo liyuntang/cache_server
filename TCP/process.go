@@ -2,6 +2,7 @@ package TCP
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,19 +12,27 @@ import (
 )
 
 
-
+type result struct {
+	v []byte
+	e error
+}
 func (s *Server)readKey(r *bufio.Reader) (string, error) {
 	klen, err := readLen(r)
 	if err != nil {
 		return "", err
 	}
-	fmt.Println("key len is", klen)
+	//fmt.Println("key len is", klen)
 	k := make([]byte, klen)
 	_, err  = io.ReadFull(r, k)
 	if err != nil {
 		return "", err
 	}
-	return string(k), nil
+	key := string(k)
+	addr, ok := s.ShouldProcess(key)
+	if !ok {
+		return "", errors.New("redirct "+addr)
+	}
+	return key, nil
 }
 
 func (s *Server)readKeyAndValue(r *bufio.Reader) (string, []byte, error) {
@@ -35,23 +44,28 @@ func (s *Server)readKeyAndValue(r *bufio.Reader) (string, []byte, error) {
 
 	vlen, err := readLen(r)
 	if err != nil {
-		return "", nil, nil
+		return "", nil, err
 	}
-	fmt.Println("len of key is", klen, "len of value is", vlen)
+	//fmt.Println("len of key is", klen, "len of value is", vlen)
 	k := make([]byte, klen)
 	// readfull表示根据所设置的buf的长度进行读取数据
 	_, err = io.ReadFull(r, k)
 	if err != nil {
-		return "", nil, nil
+		return "", nil, err
+	}
+	key := string(k)
+	addr, ok := s.ShouldProcess(key)
+	if !ok {
+		return "", nil, errors.New("redirct "+addr)
 	}
 
 	v := make([]byte, vlen)
 	_, err = io.ReadFull(r, v)
 	if err != nil {
-		return "", nil, nil
+		return "", nil, err
 	}
 	//fmt.Println("len of key is", klen, "len of value is", vlen, "key is", string(k), "values is", string(v))
-	return string(k), v, nil
+	return key, v, nil
 }
 
 func readLen(r *bufio.Reader) (int, error) {
@@ -77,7 +91,7 @@ func readLen(r *bufio.Reader) (int, error) {
 	失败：-bytes-array
  */
 func sendResponse(value []byte, err error, conn net.Conn) error {
-
+	//fmt.Println("send response>>>>>>>>>>>>>>>>")
 	if err != nil {
 		// 说明set的时候有报错
 		errString := err.Error()
@@ -89,56 +103,73 @@ func sendResponse(value []byte, err error, conn net.Conn) error {
 // 说明set的时候没有报错
 // 不对啊，这个地方value的值为nil，手动写死的，长度自然为0，有何意义
 	vlen := fmt.Sprintf("%d", len(value))
-	fmt.Println("set操作成正常，vlen is", vlen)
+	//fmt.Println("set操作成正常，vlen is", vlen)
 	//fmt.Println([]byte(vlen), value, string([]byte(vlen)), string(value))
 	//data := []byte(vlen)
 	//data = append(data, value...)
 	//fmt.Println("返回信息为", data, "string is", string(data))
 
-	num, e := conn.Write([]byte(vlen))
-	if e != nil {
-		fmt.Println("返回信息失败，错误信息:", e)
-	} else {
-		fmt.Println("返回信息成功，一共发送了", num, "个字节")
-	}
+	_, e := conn.Write([]byte(vlen))
 	return e
 }
 
-func (s *Server) get(conn net.Conn, r *bufio.Reader) error {
+func (s *Server) get(ch chan chan *result, r *bufio.Reader) {
+	c := make(chan *result)
+	ch <- c
 	k, err := s.readKey(r)
 	if err != nil {
-		return err
+		c <- &result{nil, err}
+		return
 	}
-	v, e := s.Get(k)
-	return sendResponse(v, e, conn)
+	go func() {
+		v, e := s.Get(k)
+		c <- &result{v: v, e: e}
+	}()
+
+	//return sendResponse(v, e, conn)
 }
 
-func (s *Server)set(conn net.Conn, r *bufio.Reader) error {
-	fmt.Println("进行set操作")
+func (s *Server)set(ch chan chan *result, r *bufio.Reader) {
+	c := make(chan *result)
+	ch <- c
 	// 解析数据流，这个很关键，
 	k, v, e := s.readKeyAndValue(r)
 	if e != nil {
-		return e
+		c <- &result{nil, e}
+		return
 	}
-	// 说明解析key、value没有报错，开始set数据
-	//fmt.Println("key is", k, "value is", string(v))
-	return sendResponse(nil, s.Set(k, v), conn)
+	//fmt.Println("进行set操作,key is", k, "value is", v)
+	// 存放数据
+	go func() {
+		c <- &result{nil, s.Set(k, v)}
+	}()
+	// 返回响应
+	//return sendResponse(nil, err, conn)
 }
 
-func (s *Server) del(conn net.Conn, r *bufio.Reader) error {
+func (s *Server) del(ch chan chan *result, r *bufio.Reader) {
+	c := make(chan *result)
+	ch <- c
 	k, e := s.readKey(r)
 	if e != nil {
-		return e
+		c <- &result{nil, e}
+		return
 	}
-	return sendResponse(nil, s.Del(k), conn)
+	go func() {
+		c <- &result{nil, s.Del(k)}
+	}()
+	//return sendResponse(nil, s.Del(k), conn)
 }
 
 func (s *Server) process(conn net.Conn)  {
 	//fmt.Println("process.................")
 	r := bufio.NewReader(conn)
+	resultCh := make(chan chan *result, 5000)
+	defer close(resultCh)
+	go reply(conn, resultCh)
 	num := 1
 	for {
-		//fmt.Println("开始处理第", num, "个请求")
+		fmt.Println("开始处理第", num, "个请求")
 		// readbyte好像是获取net.conn数据流的第一个字符
 		op, e := r.ReadByte()
 		if e != nil {
@@ -149,11 +180,11 @@ func (s *Server) process(conn net.Conn)  {
 		}
 		//fmt.Println("op is", string(op))
 		if op == 'S' {
-			e = s.set(conn, r)
+			s.set(resultCh, r)
 		}else if op == 'G' {
-			e = s.get(conn, r)
+			s.get(resultCh, r)
 		} else if op == 'D' {
-			e = s.del(conn, r)
+			s.del(resultCh, r)
 		} else {
 			log.Println("close connection due to invalid operation:", op)
 			return
@@ -162,8 +193,23 @@ func (s *Server) process(conn net.Conn)  {
 			log.Println("close connection due to error:", e)
 			return
 		}
-		fmt.Println("第", num, "个请求处理完成")
-		num +=1
-		break
+		num += 1
  	}
+}
+
+func reply(conn net.Conn, ch chan chan *result) {
+	defer conn.Close()
+	for {
+		c, open := <- ch
+		if !open {
+			// 说明resultCh关闭了
+			return
+		}
+		r := <- c
+		e := sendResponse(r.v, r.e, conn)
+		if e != nil {
+			log.Println("reply function close connection due to err:", e)
+			return
+		}
+	}
 }
