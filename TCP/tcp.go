@@ -21,11 +21,6 @@ func (s *Server)Listen()  {
 		if err != nil {
 			panic(err)
 		}
-		//defer func() {
-		//	fmt.Println("关闭客户端连接")
-		//	c.Close()
-		//	fmt.Println("关闭客户端连接成功")
-		//}()
 		go s.process(c)
 	}
 }

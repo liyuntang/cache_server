@@ -70,9 +70,16 @@ func readLen(r *bufio.Reader) (int, error) {
 	return l, nil
 }
 
+/*
+	sendResponse的作用是返回操作是否成功的信息，格式如下：
+	response = error|bytes-array
+	成功：返回bytes-array
+	失败：-bytes-array
+ */
 func sendResponse(value []byte, err error, conn net.Conn) error {
-	// 说明set的时候有报错
+
 	if err != nil {
+		// 说明set的时候有报错
 		errString := err.Error()
 		tmp := fmt.Sprintf("-%d", len(errString)) + errString
 		fmt.Println("set 操作报错了，错误信息为:", tmp)
@@ -84,10 +91,11 @@ func sendResponse(value []byte, err error, conn net.Conn) error {
 	vlen := fmt.Sprintf("%d", len(value))
 	fmt.Println("set操作成正常，vlen is", vlen)
 	//fmt.Println([]byte(vlen), value, string([]byte(vlen)), string(value))
-	data := []byte(vlen)
-	data = append(data, value...)
-	fmt.Println("返回信息为", data, "string is", string(data))
-	num, e := conn.Write(data)
+	//data := []byte(vlen)
+	//data = append(data, value...)
+	//fmt.Println("返回信息为", data, "string is", string(data))
+
+	num, e := conn.Write([]byte(vlen))
 	if e != nil {
 		fmt.Println("返回信息失败，错误信息:", e)
 	} else {
@@ -126,11 +134,11 @@ func (s *Server) del(conn net.Conn, r *bufio.Reader) error {
 }
 
 func (s *Server) process(conn net.Conn)  {
-	fmt.Println("process.................")
+	//fmt.Println("process.................")
 	r := bufio.NewReader(conn)
 	num := 1
 	for {
-		fmt.Println("开始处理第", num, "个请求")
+		//fmt.Println("开始处理第", num, "个请求")
 		// readbyte好像是获取net.conn数据流的第一个字符
 		op, e := r.ReadByte()
 		if e != nil {
@@ -139,7 +147,7 @@ func (s *Server) process(conn net.Conn)  {
 			}
 			return
 		}
-		fmt.Println("op is", string(op))
+		//fmt.Println("op is", string(op))
 		if op == 'S' {
 			e = s.set(conn, r)
 		}else if op == 'G' {
