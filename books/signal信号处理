@@ -1,0 +1,81 @@
+参考资料：
+    https://studygolang.com/articles/2333
+
+1、terminal信号如下：
+HUP             1           A             检测到挂起，也可让守护进程重读配置（终端连接断开）
+INT             2           A             来自键盘的中断（ctrl+C）
+QUIT            3           A             来自键盘的停止（ctrl+/）
+KILL            9           AF            终端信号
+USR1            10          A             用户定义的信号1
+USR2            12          A             用户定义的信号2
+PIPE            13          A             写往没有读取者的管道
+ALRM            14          A             来自闹钟的定时器信号
+TERM            15          A             终端信号
+
+
+1、在实际项目中我们可能有下面的需求：
+    1）修改了配置文件后，希望在不重启进程的情况下重新加载配置文件；
+    2）当用 Ctrl + C 强制关闭应用后，做一些必要的处理；
+    这时候就需要通过信号传递来进行处理了。golang中对信号的处理主要使用os/signal包中的两个方法：一个是notify方法用来监听收到的信号；一个是 stop方法用来取消监听。
+
+2、监听信号
+    notify方法原型
+        func Notify(c chan<- os.Signal, sig ...os.Signal)
+        第一个参数表示接收信号的管道
+        第二个及后面的参数表示设置要监听的信号，如果不设置表示监听所有的信号。
+
+        func main() {
+        	ch := make(chan os.Signal)
+        	signal.Notify(ch, syscall.SIGINT)
+        	for  {
+        		select {
+        		case <-time.After(1 * time.Second):
+        			fmt.Println("继续提供服务中...........")
+        		case do := <-ch:
+        			fmt.Println("我要关闭了", do)
+        			fmt.Println("拜拜")
+        			os.Exit(0)
+        		}
+        	}
+        }
+    运行结果：
+        liyuntang-2:cache_server liyuntang$ go run test.go
+        继续提供服务中...........
+        继续提供服务中...........
+        继续提供服务中...........
+        继续提供服务中...........
+        继续提供服务中...........
+        ^C我要关闭了 interrupt
+        拜拜
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

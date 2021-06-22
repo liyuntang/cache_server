@@ -2,20 +2,23 @@ package main
 
 import (
 	"fmt"
-	"sync"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 func main() {
-	pool := &sync.Pool{}
-
-	pool.Put(NewConnection(1))
-	pool.Put(NewConnection(2))
-	pool.Put(NewConnection(3))
-
-	connection := pool.Get().(*Connection)
-	fmt.Printf("%d\n", connection.id)
-	connection = pool.Get().(*Connection)
-	fmt.Printf("%d\n", connection.id)
-	connection = pool.Get().(*Connection)
-	fmt.Printf("%d\n", connection.id)
+	ch := make(chan os.Signal)
+	signal.Notify(ch, syscall.SIGINT)
+	for  {
+		select {
+		case <-time.After(1 * time.Second):
+			fmt.Println("继续提供服务中...........")
+		case do := <-ch:
+			fmt.Println("我要关闭了", do)
+			fmt.Println("拜拜")
+			os.Exit(0)
+		}
+	}
 }
