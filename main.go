@@ -9,7 +9,7 @@ import (
 	_ "net/http/pprof"
 )
 
-func main()  {
+func aaa()  {
 	typ := flag.String("type", "inmemory", "cache type")
 	ttl := flag.Int("ttl", 30, "cache time to live")
 	node := flag.String("node", "127.0.0.1", "node address")
