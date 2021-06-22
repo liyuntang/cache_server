@@ -1,0 +1,291 @@
+参考资料：
+    https://studygolang.com/articles/12970
+
+一、概述
+    go的pprof工具可以用来监测进程的运行数据，用于监控程序的性能，对内存使用和CPU使用的情况统信息进行分析。官方提供了两个包：runtime/pprof和net/http/pprof，
+前者用于普通代码的性能分析，后者用于web服务器的性能分析。官方文档：
+https://golang.org/pkg/runtime/pprof/
+https://golang.org/pkg/net/http/pprof/#Index
+https://github.com/google/pprof/blob/master/doc/pprof.md
+
+二、runtime/pprof的使用
+    该包提供了一系列用于调试信息的方法，可以很方便的对堆栈进行调试。通常用得多得是以下几个：
+    StartCPUProfile：开始监控cpu。
+    StopCPUProfile：停止监控cpu，使用StartCPUProfile后一定要调用该函数停止监控。
+    WriteHeapProfile：把堆中的内存分配信息写入分析文件中。
+
+示例代码：
+        package main
+
+        import (
+        	"flag"
+        	"fmt"
+        	"math/rand"
+        	"os"
+        	"runtime"
+        	"runtime/pprof"
+        	"time"
+        )
+
+        var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
+        var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
+
+        const (
+        	col = 10000
+        	row = 10000
+        )
+
+        var usage = func() {
+        	flag.PrintDefaults()
+        }
+
+        func main() {
+        	flag.Parse()
+        	if *cpuprofile != "" {
+        		// 说明定义了该参数
+        		file, err := os.Create(*cpuprofile)
+        		if err != nil {
+        			fmt.Println("create cpuprofile is bad, err is", err)
+        			return
+        		}
+        		defer file.Close()
+        		err = pprof.StartCPUProfile(file)
+        		if err != nil {
+        			fmt.Println("could not start CPU profile, err is", err)
+        			return
+        		}
+        		defer pprof.StopCPUProfile()
+        	} else  {
+        		// 没有定义该参数
+        		fmt.Println("没有配置cpuprofile")
+        	}
+
+        	// 主逻辑区，进行一些简单的代码运算
+        	x := [row][col]int{}
+        	s := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+        	for i := 0; i < row; i++{
+        		for j := 0; j < col; j++ {
+        			x[i][j] = s.Intn(100000)
+        		}
+        	}
+
+
+        	for i := 0; i < row; i++{
+        		tmp := 0
+        		for j := 0; j < col; j++ {
+        			tmp += x[i][j]
+        		}
+        	}
+
+        	if *memprofile != "" {
+        		file, err := os.Create(*memprofile)
+        		if err != nil {
+        			fmt.Println("create memprofile is bad, err is", err)
+        			return
+        		}
+        		defer file.Close()
+        		runtime.GC()
+        		err = pprof.WriteHeapProfile(file)
+        		if err != nil {
+        			fmt.Println("could not write memory profile, err is", err)
+        			return
+        		}
+        	}
+
+
+        }
+
+编译运行，会根据入参生成两个对应的数据文件：
+    liyuntang-2:zzz liyuntang$ go run main.go -cpuprofile cpu.prof -memprofile mem.prof
+    liyuntang-2:zzz liyuntang$ ls -lh
+    total 40
+    -rw-r--r--  1 liyuntang  staff   2.1K Jun 22 14:13 cpu.prof
+    -rw-r--r--  1 liyuntang  staff    71B Jun 21 16:16 go.mod
+    -rw-r--r--  1 liyuntang  staff   171B Jun 21 16:33 go.sum
+    -rw-r--r--  1 liyuntang  staff   1.4K Jun 22 14:12 main.go
+    -rw-r--r--  1 liyuntang  staff   279B Jun 22 14:13 mem.prof
+使用go tool pprof命令即可分析。
+
+三、go tool pprof
+    生成数据文件后使用go tool pprof file进入交互式界面进行数据分析，输入help可以查看命令，用法详见：pprof.md
+    liyuntang-2:zzz liyuntang$ go tool pprof cpu.prof
+    Type: cpu
+    Time: Jun 22, 2021 at 2:13pm (CST)
+    Duration: 1.75s, Total samples = 1.88s (107.69%)
+    Entering interactive mode (type "help" for commands, "o" for options)
+    (pprof) help
+      Commands:
+        callgrind        Outputs a graph in callgrind format
+        comments         Output all profile comments
+        disasm           Output assembly listings annotated with samples
+        dot              Outputs a graph in DOT format
+        eog              Visualize graph through eog
+        evince           Visualize graph through evince
+        gif              Outputs a graph image in GIF format
+        gv               Visualize graph through gv
+        kcachegrind      Visualize report in KCachegrind
+        list             Output annotated source for functions matching regexp
+        pdf              Outputs a graph in PDF format
+        peek             Output callers/callees of functions matching regexp
+        png              Outputs a graph image in PNG format
+        proto            Outputs the profile in compressed protobuf format
+        ps               Outputs a graph in PS format
+        raw              Outputs a text representation of the raw profile
+        svg              Outputs a graph in SVG format
+        tags             Outputs all tags in the profile
+        text             Outputs top entries in text form
+        top              Outputs top entries in text form
+        topproto         Outputs top entries in compressed protobuf format
+        traces           Outputs all profile samples in text form
+        tree             Outputs a text rendering of call graph
+        web              Visualize graph through web browser
+        weblist          Display annotated source in a web browser
+        o/options        List options and their current values
+        quit/exit/^D     Exit pprof
+
+      Options:
+        call_tree        Create a context-sensitive call tree
+        compact_labels   Show minimal headers
+        divide_by        Ratio to divide all samples before visualization
+        drop_negative    Ignore negative differences
+        edgefraction     Hide edges below <f>*total
+        focus            Restricts to samples going through a node matching regexp
+        hide             Skips nodes matching regexp
+        ignore           Skips paths going through any nodes matching regexp
+        mean             Average sample value over first value (count)
+        nodecount        Max number of nodes to show
+        nodefraction     Hide nodes below <f>*total
+        noinlines        Ignore inlines.
+        normalize        Scales profile based on the base profile.
+        output           Output filename for file-based outputs
+        prune_from       Drops any functions below the matched frame.
+        relative_percentages Show percentages relative to focused subgraph
+        sample_index     Sample value to report (0-based index or name)
+        show             Only show nodes matching regexp
+        show_from        Drops functions above the highest matched frame.
+        source_path      Search path for source files
+        tagfocus         Restricts to samples with tags in range or matched by regexp
+        taghide          Skip tags matching this regexp
+        tagignore        Discard samples with tags in range or matched by regexp
+        tagshow          Only consider tags matching this regexp
+        trim             Honor nodefraction/edgefraction/nodecount defaults
+        trim_path        Path to trim from source paths before search
+        unit             Measurement units to display
+
+      Option groups (only set one per group):
+        cumulative
+          cum              Sort entries based on cumulative weight
+          flat             Sort entries based on own weight
+        granularity
+          addresses        Aggregate at the address level.
+          filefunctions    Aggregate at the function level.
+          files            Aggregate at the file level.
+          functions        Aggregate at the function level.
+          lines            Aggregate at the source code line level.
+      :   Clear focus/ignore/hide/tagfocus/tagignore
+
+      type "help <cmd|option>" for more information
+
+1、top
+    命令格式：top [n]，查看排名前n个数据，默认为10。
+    (pprof) top
+    Showing nodes accounting for 1.85s, 98.40% of 1.88s total
+    Showing top 10 nodes out of 37
+          flat  flat%   sum%        cum   cum%
+         0.57s 30.32% 30.32%      0.90s 47.87%  math/rand.(*Rand).Int31n
+         0.49s 26.06% 56.38%      0.49s 26.06%  runtime.memclrNoHeapPointers
+         0.22s 11.70% 68.09%      1.80s 95.74%  main.main
+         0.18s  9.57% 77.66%      1.08s 57.45%  math/rand.(*Rand).Intn
+         0.15s  7.98% 85.64%      0.15s  7.98%  math/rand.(*rngSource).Uint64
+         0.11s  5.85% 91.49%      0.26s 13.83%  math/rand.(*rngSource).Int63
+         0.06s  3.19% 94.68%      0.32s 17.02%  math/rand.(*Rand).Int63
+         0.03s  1.60% 96.28%      0.03s  1.60%  runtime.nanotime1
+         0.03s  1.60% 97.87%      0.03s  1.60%  runtime.pthread_cond_timedwait_relative_np
+         0.01s  0.53% 98.40%      0.33s 17.55%  math/rand.(*Rand).Int31 (inline)
+
+2、tree
+    命令格式：tree [n]，以树状图形式显示，默认显示10个。
+    (pprof) tree
+    Showing nodes accounting for 1.88s, 100% of 1.88s total
+    ----------------------------------------------------------+-------------
+          flat  flat%   sum%        cum   cum%   calls calls% + context
+    ----------------------------------------------------------+-------------
+                                                 0.90s   100% |   math/rand.(*Rand).Intn
+         0.57s 30.32% 30.32%      0.90s 47.87%                | math/rand.(*Rand).Int31n
+                                                 0.33s 36.67% |   math/rand.(*Rand).Int31 (inline)
+    ----------------------------------------------------------+-------------
+                                                 0.48s 97.96% |   runtime.(*mheap).alloc
+                                                 0.01s  2.04% |   runtime.heapBits.initSpan
+         0.49s 26.06% 56.38%      0.49s 26.06%                | runtime.memclrNoHeapPointers
+    ----------------------------------------------------------+-------------
+                                                 1.80s   100% |   runtime.main
+         0.22s 11.70% 68.09%      1.80s 95.74%                | main.main
+                                                 1.08s 60.00% |   math/rand.(*Rand).Intn
+                                                 0.49s 27.22% |   runtime.newobject
+                                                 0.01s  0.56% |   math/rand.New (inline)
+    ----------------------------------------------------------+-------------
+                                                 1.08s   100% |   main.main
+         0.18s  9.57% 77.66%      1.08s 57.45%                | math/rand.(*Rand).Intn
+                                                 0.90s 83.33% |   math/rand.(*Rand).Int31n
+
+四、web服务器监测
+    在web服务器中监测只需要在import部分加上监测包即可：
+        import (
+        	"cache_server/HTTP"
+        	"cache_server/TCP"
+        	"cache_server/cache"
+        	"cache_server/cluster"
+        	"flag"
+        	_ "net/http/pprof"
+        )
+
+    当服务开启后，在当前服务环境的http://ip:port/debug/pprof页面可以看到当前的系统信息：http://127.0.0.1:12345/debug/pprof
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

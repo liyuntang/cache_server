@@ -6,6 +6,7 @@ import (
 	"cache_server/cache"
 	"cache_server/cluster"
 	"flag"
+	_ "net/http/pprof"
 )
 
 func main()  {
