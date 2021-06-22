@@ -1,5 +1,6 @@
 参考资料：
     https://studygolang.com/articles/12970
+    https://zhuanlan.zhihu.com/p/51559344
 
 一、概述
     go的pprof工具可以用来监测进程的运行数据，用于监控程序的性能，对内存使用和CPU使用的情况统信息进行分析。官方提供了两个包：runtime/pprof和net/http/pprof，
@@ -188,7 +189,7 @@ https://github.com/google/pprof/blob/master/doc/pprof.md
       type "help <cmd|option>" for more information
 
 1、top
-    命令格式：top [n]，查看排名前n个数据，默认为10。
+    命令格式：top [n]，可以查出程序最耗 CPU 的调用，默认为10。
     (pprof) top
     Showing nodes accounting for 1.85s, 98.40% of 1.88s total
     Showing top 10 nodes out of 37
@@ -203,6 +204,11 @@ https://github.com/google/pprof/blob/master/doc/pprof.md
          0.03s  1.60% 96.28%      0.03s  1.60%  runtime.nanotime1
          0.03s  1.60% 97.87%      0.03s  1.60%  runtime.pthread_cond_timedwait_relative_np
          0.01s  0.53% 98.40%      0.33s 17.55%  math/rand.(*Rand).Int31 (inline)
+
+flat、flat% 表示函数在 CPU 上运行的时间以及百分比
+sum% 表示当前函数累加使用 CPU 的比例
+cum、cum%表示该函数以及子函数运行所占用的时间和比例，应该大于等于前两列的值
+
 
 2、tree
     命令格式：tree [n]，以树状图形式显示，默认显示10个。
