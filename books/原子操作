@@ -1,0 +1,128 @@
+参考资料：
+    https://studygolang.com/articles/3557
+    https://www.cnblogs.com/ricklz/p/13648859.html
+
+
+    atomic是最轻量级的锁,在一些场景下直接使用atomic包还是很有效的，CAS操作的优势是，可以在不形成临界区和创建互斥量的情况下完成并发安全的值替换操作。这可以大大的减少同步对程序性能的损耗。
+当然，CAS操作也有劣势。在被操作值被频繁变更的情况下，CAS操作并不那么容易成功。
+    原子操作共有5种，即：增或减、比较并交换、载入、存储和交换
+
+1. 增或减
+    被用于进行增或减的原子操作（以下简称原子增/减操作）的函数名称都以“Add”为前缀，并后跟针对的具体类型的名称。不过，由于atomic.AddUint32函数和atomic.AddUint64函数的第二个参数的类型
+分别是uint32和uint64，所以我们无法通过传递一个负的数值来减小被操作值。atomic.AddUint32(&ui32, ^uint32(-NN-1))      其中NN代表了一个负整数
+
+2. 比较并交换
+    func CompareAndSwapInt32(addr *int32, old, new int32) (swapped bool)第一个参数的值应该是指向被操作值的指针值。该值的类型即为*int32。后两个参数的类型都是int32类型。它们的
+值应该分别代表被操作值的旧值和新值，CompareAndSwapInt32函数在被调用之后会先判断参数addr指向的被操作值与参数old的值是否相等。仅当此判断得到肯定的结果之后，该函数才会用参数new代表的新值
+替换掉原先的旧值。否则，后面的替换操作就会被忽略。
+
+3. 载入
+    v := atomic.LoadInt32(&value)，函数atomic.LoadInt32接受一个*int32类型的指针值，并会返回该指针值指向的那个值，有了“原子的”这个形容词就意味着，在这里读取value的值的同时，
+当前计算机中的任何CPU都不会进行其它的针对此值的读或写操作。这样的约束是受到底层硬件的支持的。
+
+4. 存储
+    在原子的存储某个值的过程中，任何CPU都不会进行针对同一个值的读或写操作。如果我们把所有针对此值的写操作都改为原子操作，那么就不会出现针对此值的读操作因被并发的进行而读到修改了一半的值的
+情况了。原子的值存储操作总会成功，因为它并不会关心被操作值的旧值是什么。函数atomic.StoreInt32会接受两个参数。第一个参数的类型是*int 32类型的，其含义同样是指向被操作值的指针。而第二个参数
+则是int32类型的，它的值应该代表欲存储的新值。其它的同类函数也会有类似的参数声明列表。
+
+5. 交换
+    与CAS操作不同，原子交换操作不会关心被操作值的旧值。它会直接设置新值。但它又比原子载入操作多做了一步。作为交换，它会返回被操作值的旧值。此类操作比CAS操作的约束更少，同时又比原子载入操作
+的功能更强。以atomic.SwapInt32函数为例。它接受两个参数。第一个参数是代表了被操作值的内存地址的*int32类型值，而第二个参数则被用来表示新值。注意，该函数是有结果值的。该值即是被新值替换掉
+的旧值。atomic.SwapInt32函数被调用后，会把第二个参数值置于第一个参数值所表示的内存地址上（即修改被操作值），并将之前在该地址上的那个值作为结果返回。
+
+例子:
+    df.rmutex.Lock()
+    defer df.rmutex.Unlock()
+    return df.roffset / int64(df.dataLen)
+    我们现在去掉施加在上面的锁定和解锁操作，转而使用原子操作来实现它。修改后的代码如下：
+    offset := atomic.LoadInt64(&df.roffset)
+    return offset / int64(df.dataLen)
+    用原子操作来替换mutex锁，其主要原因是，原子操作由底层硬件支持，而锁则由操作系统提供的API实现。若实现相同的功能，前者通常会更有效率。
+
+
+1、原子操作
+    原子操作即是进行过程中不能被中断的操作，针对某个值的原子操作在被进行的过程中，CPU绝不会再去进行其他的针对该值的操作。为了实现这样的严谨性，原子操作仅会由一个独立的CPU指令代表和完成。
+原子操作是无锁的，常常直接通过CPU指令直接实现。 事实上，其它同步技术的实现常常依赖于原子操作。具体的原子操作在不同的操作系统中实现是不同的。比如在Intel的CPU架构机器上，主要是使用总线锁的
+方式实现的。 大致的意思就是当一个CPU需要操作一个内存块的时候，向总线发送一个LOCK信号，所有CPU收到这个信号后就不对这个内存块进行操作了。 等待操作的CPU执行完操作后，发送UNLOCK信号，才结束。
+在AMD的CPU架构机器上就是使用MESI一致性协议的方式来保证原子操作。 所以我们在看atomic源码的时候，我们看到它针对不同的操作系统有不同汇编语言文件。
+
+2、Go中原子操作的支持
+    Go语言的sync/atomic提供了对原子操作的支持，用于同步访问整数和指针。Go语言提供的原子操作都是非入侵式的，原子操作支持的类型包括int32、int64、uint32、uint64、uintptr、
+unsafe.Pointer。竞争条件是由于异步的访问共享资源，并试图同时读写该资源而导致的，使用互斥锁和通道的思路都是在线程获得到访问权后阻塞其他线程对共享内存的访问，而使用原子操作解决数据竞争问题
+则是利用了其不可被打断的特性。
+
+3、CompareAndSwap(CAS)
+    go中的Cas操作，是借用了CPU提供的原子性指令来实现。CAS操作修改共享变量时候不需要对共享变量加锁，而是通过类似乐观锁的方式进行检查，本质还是不断的占用CPU资源换取加锁带来的开销，原子操作
+中的CAS(Compare And Swap),在sync/atomic包中，这类原子操作由名称以CompareAndSwap为前缀的若干个函数提供：
+        func CompareAndSwapInt32(addr *int32, old, new int32) (swapped bool)
+        func CompareAndSwapInt64(addr *int64, old, new int64) (swapped bool)
+        func CompareAndSwapPointer(addr *unsafe.Pointer, old, new unsafe.Pointer) (swapped bool)
+        func CompareAndSwapUint32(addr *uint32, old, new uint32) (swapped bool)
+        func CompareAndSwapUint64(addr *uint64, old, new uint64) (swapped bool)
+        func CompareAndSwapUintptr(addr *uintptr, old, new uintptr) (swapped bool)
+    CompareAndSwap函数会先判断参数addr指向的操作值与参数old的值是否相等，仅当此判断得到的结果是true之后，才会用参数new代表的新值替换掉原先的旧值，否则操作就会被忽略。查看下源码，这几
+个代码差不多，以CompareAndSwapUint32为例子,golang主要还是依赖汇编来来实现的原子操作，不同的CPU架构是有对应不同的.s汇编文件的。
+        /usr/local/go/src/sync/atomic/asm.s
+        TEXT ·CompareAndSwapUint32(SB),NOSPLIT,$0
+        	JMP	runtime∕internal∕atomic·Cas(SB)
+        看下汇编的Cas
+            // bool Casp1(void **val, void *old, void *new)
+            // Atomically:
+            //	if(*val == old){
+            //		*val = new;
+            //		return 1;
+            //	} else
+            //		return 0;
+            TEXT runtime∕internal∕atomic·Casp1(SB), NOSPLIT, $0-25
+                    // 首先将 ptr 的值放入 BX
+            	MOVQ	ptr+0(FP), BX
+                    // 将假设的旧值放入 AX
+            	MOVQ	old+8(FP), AX
+                    // 需要比较的新值放入到CX
+            	MOVQ	new+16(FP), CX
+            	LOCK
+            	CMPXCHGQ	CX, 0(BX)
+            	SETEQ	ret+24(FP)
+            	RET
+
+    MOV 指令有有好几种后缀 MOVB MOVW MOVL MOVQ 分别对应的是 1 字节 、2 字节 、4 字节、8 字节
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
